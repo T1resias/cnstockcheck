@@ -111,11 +111,13 @@ export async function fetchLimitUpPool(_dateStr: string): Promise<LimitUpStock[]
   }
 
   // 批量获取行业信息 (优先用缓存，缓存未命中则调API)
+  // Vercel环境下跳过个股API调用（10s超时限制），仅用本地缓存
   const sectorMap = new Map<string, string>(Object.entries(localIndustryMap));
+  const isVercel = process.env.VERCEL === "1";
 
   for (const s of candidates) {
     const code = String(s.code);
-    if (sectorMap.has(code)) continue;
+    if (sectorMap.has(code) || isVercel) continue;
 
     try {
       const mkt = marketCode(code) === 1 ? "1" : "0";
