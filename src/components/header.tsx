@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { TradingStatusBadge } from "./trading-status-badge";
 
 interface Props {
@@ -24,6 +25,7 @@ export function Header({
 }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
+  const router = useRouter();
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -35,6 +37,8 @@ export function Header({
         setMessage(
           `刷新成功: ${data.stockCount} 只涨停 / ${data.sectorCount} 个板块 / ${data.newsCount} 条资讯`
         );
+        // 等 Blob 写入完成，刷新页面展示新数据
+        setTimeout(() => router.refresh(), 500);
       } else {
         setMessage(data.error || "刷新失败");
       }

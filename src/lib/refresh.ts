@@ -4,18 +4,21 @@ import { saveDailyData } from "./data-store";
 import { isTradingDay, getLatestTradingDay } from "./trading-calendar";
 import type { DailyMarketData } from "./types";
 
+function beijingNow(): Date {
+  return new Date(new Date().getTime() + 8 * 3600 * 1000);
+}
+
 function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const d = beijingNow();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
 /** A股收盘时间: 北京时间 15:00 */
 function isAfterMarketClose(): boolean {
-  const now = new Date();
-  const h = now.getHours();
+  const h = beijingNow().getUTCHours();
   return h >= 15;
 }
 
