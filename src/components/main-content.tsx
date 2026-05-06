@@ -37,9 +37,6 @@ export function MainContent({
     [router, today]
   );
 
-  // 展示：今天日期为主，数据日期为辅
-  const isStale = data && data.date !== selectedDate && selectedDate === today;
-
   return (
     <div className="min-h-screen">
       <Header
@@ -73,10 +70,6 @@ export function MainContent({
                 ? '请点击右上角"刷新数据"按钮拉取今日数据'
                 : "请选择其他日期查看"}
             </p>
-          </div>
-        ) : selectedDate !== displayDate ? (
-          <div className="text-center py-20">
-            <p className="text-gray-400">该日期暂无数据</p>
           </div>
         ) : (
           <>
