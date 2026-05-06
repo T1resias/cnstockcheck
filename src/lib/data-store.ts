@@ -2,10 +2,18 @@ import type { DailyMarketData, ConsecutiveDaysStore } from "./types";
 
 const isVercel = process.env.VERCEL === "1";
 
-/** Vercel Blob 是否可用（环境变量已配置） */
+/** Vercel Blob 是否可用 */
 function blobReady(): boolean {
   return isVercel && !!process.env.BLOB_READ_WRITE_TOKEN;
 }
+
+// 编译时就打包到函数里的已提交数据
+import committedHistory0506 from "@/../data/history/2026-05-06.json";
+import committedConsecutive from "@/../data/consecutive-days.json";
+
+const committedData: Record<string, DailyMarketData> = {
+  "2026-05-06": committedHistory0506 as unknown as DailyMarketData,
+};
 
 // ========== 每日快照 ==========
 
@@ -21,7 +29,7 @@ export async function saveDailyData(data: DailyMarketData): Promise<void> {
       });
       return;
     } catch {
-      // Blob 写入失败，降级到无持久化（本次请求内存有效）
+      // Blob 写入失败，降级
     }
   } else {
     const fs = await import("fs/promises");
@@ -34,12 +42,21 @@ export async function saveDailyData(data: DailyMarketData): Promise<void> {
 
 export async function loadDailyData(dateStr: string): Promise<DailyMarketData | null> {
   if (blobReady()) {
-    const { list } = await import("@vercel/blob");
-    const { blobs } = await list({ prefix: `history/${dateStr}.json` });
-    if (blobs.length === 0) return null;
-    const res = await fetch(blobs[0].url);
-    if (!res.ok) return null;
-    return res.json();
+    try {
+      const { list } = await import("@vercel/blob");
+      const { blobs } = await list({ prefix: `history/${dateStr}.json` });
+      if (blobs.length === 0) return null;
+      const res = await fetch(blobs[0].url);
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      // Blob 读取失败，走降级
+    }
+  }
+
+  // Vercel 上无 Blob 时用编译时打包的数据
+  if (isVercel) {
+    return committedData[dateStr] || null;
   }
 
   const fs = await import("fs/promises");
@@ -55,17 +72,30 @@ export async function loadDailyData(dateStr: string): Promise<DailyMarketData | 
 
 export async function loadLatestData(): Promise<DailyMarketData | null> {
   if (blobReady()) {
-    const { list } = await import("@vercel/blob");
-    const { blobs } = await list({ prefix: "history/202" });
-    const sorted = blobs
-      .map((b) => b.pathname.replace("history/", "").replace(".json", ""))
-      .filter((d) => d.startsWith("20"))
-      .sort()
-      .reverse();
+    try {
+      const { list } = await import("@vercel/blob");
+      const { blobs } = await list({ prefix: "history/202" });
+      const sorted = blobs
+        .map((b) => b.pathname.replace("history/", "").replace(".json", ""))
+        .filter((d) => d.startsWith("20"))
+        .sort()
+        .reverse();
 
-    for (const dateStr of sorted) {
-      const data = await loadDailyData(dateStr);
-      if (data && data.limitUpStocks.length > 0) return data;
+      for (const dateStr of sorted) {
+        const data = await loadDailyData(dateStr);
+        if (data && data.limitUpStocks.length > 0) return data;
+      }
+    } catch {
+      // Blob 列表失败
+    }
+    return null;
+  }
+
+  // Vercel 上无 Blob 时用编译时打包的数据
+  if (isVercel) {
+    const dates = Object.keys(committedData).sort().reverse();
+    for (const d of dates) {
+      if (committedData[d]?.limitUpStocks?.length > 0) return committedData[d];
     }
     return null;
   }
@@ -93,14 +123,22 @@ export async function loadLatestData(): Promise<DailyMarketData | null> {
 
 export async function getRecentDates(days: number): Promise<string[]> {
   if (blobReady()) {
-    const { list } = await import("@vercel/blob");
-    const { blobs } = await list({ prefix: "history/202" });
-    return blobs
-      .map((b) => b.pathname.replace("history/", "").replace(".json", ""))
-      .filter((d) => d.startsWith("20"))
-      .sort()
-      .reverse()
-      .slice(0, days);
+    try {
+      const { list } = await import("@vercel/blob");
+      const { blobs } = await list({ prefix: "history/202" });
+      return blobs
+        .map((b) => b.pathname.replace("history/", "").replace(".json", ""))
+        .filter((d) => d.startsWith("20"))
+        .sort()
+        .reverse()
+        .slice(0, days);
+    } catch {
+      // 降级
+    }
+  }
+
+  if (isVercel) {
+    return Object.keys(committedData).sort().reverse().slice(0, days);
   }
 
   const fs = await import("fs/promises");
@@ -124,12 +162,20 @@ export async function getRecentDates(days: number): Promise<string[]> {
 
 export async function loadConsecutiveDays(): Promise<ConsecutiveDaysStore> {
   if (blobReady()) {
-    const { list } = await import("@vercel/blob");
-    const { blobs } = await list({ prefix: "consecutive-days.json" });
-    if (blobs.length === 0) return { sectors: {}, lastUpdateDate: "" };
-    const res = await fetch(blobs[0].url);
-    if (!res.ok) return { sectors: {}, lastUpdateDate: "" };
-    return res.json();
+    try {
+      const { list } = await import("@vercel/blob");
+      const { blobs } = await list({ prefix: "consecutive-days.json" });
+      if (blobs.length === 0) return { sectors: {}, lastUpdateDate: "" };
+      const res = await fetch(blobs[0].url);
+      if (!res.ok) return { sectors: {}, lastUpdateDate: "" };
+      return res.json();
+    } catch {
+      // 降级
+    }
+  }
+
+  if (isVercel) {
+    return committedConsecutive as unknown as ConsecutiveDaysStore;
   }
 
   const fs = await import("fs/promises");
