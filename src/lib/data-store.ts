@@ -24,8 +24,8 @@ export async function saveDailyData(data: DailyMarketData): Promise<void> {
     try {
       const { put } = await import("@vercel/blob");
       await put(`history/${data.date}.json`, content, {
-        access: "public",
         contentType: "application/json",
+        addRandomSuffix: false,
       });
       return;
     } catch {
@@ -195,8 +195,8 @@ export async function saveConsecutiveDays(store: ConsecutiveDaysStore): Promise<
   if (blobReady()) {
     const { put } = await import("@vercel/blob");
     await put("consecutive-days.json", content, {
-      access: "public",
       contentType: "application/json",
+      addRandomSuffix: false,
     });
     return;
   }

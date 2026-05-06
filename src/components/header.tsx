@@ -6,6 +6,7 @@ import { TradingStatusBadge } from "./trading-status-badge";
 interface Props {
   isTradingDay: boolean;
   date: string;
+  dataDate?: string;
   selectedDate: string;
   today: string;
   availableDates: string[];
@@ -15,6 +16,7 @@ interface Props {
 export function Header({
   isTradingDay,
   date,
+  dataDate,
   selectedDate,
   today,
   availableDates,
@@ -52,6 +54,9 @@ export function Header({
               <div className="flex items-center gap-2">
                 <span>{date}</span>
                 <TradingStatusBadge isTradingDay={isTradingDay} />
+                {dataDate && dataDate !== date && (
+                  <span className="text-gray-400">(数据日期: {dataDate})</span>
+                )}
               </div>
               {/* 日期选择器 */}
               <select

@@ -37,13 +37,15 @@ export function MainContent({
     [router, today]
   );
 
-  const displayDate = data?.date || selectedDate;
+  // 展示：今天日期为主，数据日期为辅
+  const isStale = data && data.date !== selectedDate && selectedDate === today;
 
   return (
     <div className="min-h-screen">
       <Header
         isTradingDay={isTradingDay}
-        date={displayDate}
+        date={selectedDate}
+        dataDate={data?.date}
         selectedDate={selectedDate}
         today={today}
         availableDates={availableDates}
