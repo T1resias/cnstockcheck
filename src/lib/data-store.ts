@@ -1,25 +1,40 @@
-import fs from "fs/promises";
-import path from "path";
 import type { DailyMarketData, ConsecutiveDaysStore } from "./types";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const HISTORY_DIR = path.join(DATA_DIR, "history");
-const CONSECUTIVE_FILE = path.join(DATA_DIR, "consecutive-days.json");
-
-async function ensureDirs(): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.mkdir(HISTORY_DIR, { recursive: true });
-}
+const isVercel = process.env.VERCEL === "1";
 
 // ========== 每日快照 ==========
+
 export async function saveDailyData(data: DailyMarketData): Promise<void> {
-  await ensureDirs();
-  const filepath = path.join(HISTORY_DIR, `${data.date}.json`);
-  await fs.writeFile(filepath, JSON.stringify(data, null, 2), "utf-8");
+  const content = JSON.stringify(data);
+
+  if (isVercel) {
+    const { put } = await import("@vercel/blob");
+    await put(`history/${data.date}.json`, content, {
+      access: "public",
+      contentType: "application/json",
+    });
+  } else {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const dir = path.join(process.cwd(), "data", "history");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, `${data.date}.json`), content, "utf-8");
+  }
 }
 
 export async function loadDailyData(dateStr: string): Promise<DailyMarketData | null> {
-  const filepath = path.join(HISTORY_DIR, `${dateStr}.json`);
+  if (isVercel) {
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: `history/${dateStr}.json` });
+    if (blobs.length === 0) return null;
+    const res = await fetch(blobs[0].url);
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  const fs = await import("fs/promises");
+  const path = await import("path");
+  const filepath = path.join(process.cwd(), "data", "history", `${dateStr}.json`);
   try {
     const raw = await fs.readFile(filepath, "utf-8");
     return JSON.parse(raw);
@@ -29,10 +44,28 @@ export async function loadDailyData(dateStr: string): Promise<DailyMarketData | 
 }
 
 export async function loadLatestData(): Promise<DailyMarketData | null> {
-  await ensureDirs();
+  if (isVercel) {
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: "history/202" });
+    const sorted = blobs
+      .map((b) => b.pathname.replace("history/", "").replace(".json", ""))
+      .filter((d) => d.startsWith("20"))
+      .sort()
+      .reverse();
+
+    for (const dateStr of sorted) {
+      const data = await loadDailyData(dateStr);
+      if (data && data.limitUpStocks.length > 0) return data;
+    }
+    return null;
+  }
+
+  const fs = await import("fs/promises");
+  const path = await import("path");
+  const dir = path.join(process.cwd(), "data", "history");
   let files: string[];
   try {
-    files = await fs.readdir(HISTORY_DIR);
+    files = await fs.readdir(dir);
   } catch {
     return null;
   }
@@ -41,7 +74,6 @@ export async function loadLatestData(): Promise<DailyMarketData | null> {
     .sort()
     .reverse();
 
-  // 跳过空数据文件 (今天盘前生成的)
   for (const f of jsonFiles) {
     const data = await loadDailyData(f.replace(".json", ""));
     if (data && data.limitUpStocks.length > 0) return data;
@@ -50,10 +82,23 @@ export async function loadLatestData(): Promise<DailyMarketData | null> {
 }
 
 export async function getRecentDates(days: number): Promise<string[]> {
-  await ensureDirs();
+  if (isVercel) {
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: "history/202" });
+    return blobs
+      .map((b) => b.pathname.replace("history/", "").replace(".json", ""))
+      .filter((d) => d.startsWith("20"))
+      .sort()
+      .reverse()
+      .slice(0, days);
+  }
+
+  const fs = await import("fs/promises");
+  const path = await import("path");
+  const dir = path.join(process.cwd(), "data", "history");
   let files: string[];
   try {
-    files = await fs.readdir(HISTORY_DIR);
+    files = await fs.readdir(dir);
   } catch {
     return [];
   }
@@ -66,9 +111,22 @@ export async function getRecentDates(days: number): Promise<string[]> {
 }
 
 // ========== 连榜存储 ==========
+
 export async function loadConsecutiveDays(): Promise<ConsecutiveDaysStore> {
+  if (isVercel) {
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: "consecutive-days.json" });
+    if (blobs.length === 0) return { sectors: {}, lastUpdateDate: "" };
+    const res = await fetch(blobs[0].url);
+    if (!res.ok) return { sectors: {}, lastUpdateDate: "" };
+    return res.json();
+  }
+
+  const fs = await import("fs/promises");
+  const path = await import("path");
+  const filepath = path.join(process.cwd(), "data", "consecutive-days.json");
   try {
-    const raw = await fs.readFile(CONSECUTIVE_FILE, "utf-8");
+    const raw = await fs.readFile(filepath, "utf-8");
     return JSON.parse(raw);
   } catch {
     return { sectors: {}, lastUpdateDate: "" };
@@ -76,6 +134,20 @@ export async function loadConsecutiveDays(): Promise<ConsecutiveDaysStore> {
 }
 
 export async function saveConsecutiveDays(store: ConsecutiveDaysStore): Promise<void> {
-  await ensureDirs();
-  await fs.writeFile(CONSECUTIVE_FILE, JSON.stringify(store, null, 2), "utf-8");
+  const content = JSON.stringify(store);
+
+  if (isVercel) {
+    const { put } = await import("@vercel/blob");
+    await put("consecutive-days.json", content, {
+      access: "public",
+      contentType: "application/json",
+    });
+    return;
+  }
+
+  const fs = await import("fs/promises");
+  const path = await import("path");
+  const dir = path.join(process.cwd(), "data");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "consecutive-days.json"), content, "utf-8");
 }

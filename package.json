@@ -10,6 +10,7 @@
     "refresh": "npx tsx scripts/refresh-data.ts"
   },
   "dependencies": {
+    "@vercel/blob": "^2.3.3",
     "next": "^16.2.5",
     "react": "19.2.0",
     "react-dom": "19.2.0"
