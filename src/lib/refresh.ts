@@ -1,6 +1,6 @@
 import { fetchLimitUpPool, fetchSectorRanking, fetchNews, deriveSectorRanking } from "./eastmoney";
 import { updateConsecutiveDays } from "./consecutive-days";
-import { saveDailyData } from "./data-store";
+import { saveDailyData, loadDailyData } from "./data-store";
 import { isTradingDay, getLatestTradingDay } from "./trading-calendar";
 import type { DailyMarketData } from "./types";
 
@@ -37,6 +37,21 @@ export async function refreshAll(): Promise<{
     fetchSectorRanking().catch(() => [] as import("./types").SectorRanking[]),
     fetchNews().catch(() => []),
   ]);
+
+  // 计算连板天数: 对比前一交易日数据
+  try {
+    const prevDate = await getLatestTradingDay(dataDate);
+    const prevData = await loadDailyData(prevDate);
+    if (prevData && prevData.limitUpStocks.length > 0) {
+      const prevMap = new Map(prevData.limitUpStocks.map(s => [s.code, s.limitUpDays]));
+      for (const stock of stocks) {
+        const prevDays = prevMap.get(stock.code);
+        if (prevDays !== undefined) {
+          stock.limitUpDays = prevDays + 1;
+        }
+      }
+    }
+  } catch { /* 无法获取前日数据时保持1 */ }
 
   // 如果东方财富板块API不可用，从涨停股聚合板块排行
   const sectorInput =

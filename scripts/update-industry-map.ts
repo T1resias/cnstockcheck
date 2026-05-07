@@ -33,6 +33,21 @@ async function fetchIndustry(emCode: string): Promise<string | null> {
   return json?.jbzl?.sshy || null;
 }
 
+/** 北交所等 F10 API 不支持的股票, 用 push2 行情接口兜底 */
+async function fetchIndustryFallback(code: string): Promise<string | null> {
+  const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f12,f100&secids=0.${code}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Referer: "https://quote.eastmoney.com/" },
+  });
+  if (!res.ok) return null;
+  const json: any = await res.json();
+  const diff = json?.data?.diff;
+  if (diff && diff.length > 0) {
+    return diff[0].f100 || null;
+  }
+  return null;
+}
+
 async function main() {
   // 加载现有缓存
   let existing: Record<string, string> = {};
@@ -53,9 +68,17 @@ async function main() {
   // 加载今日涨停数据，找出缺失的股票
   let missing: { code: string; name: string }[] = [];
   try {
+    const todayDate =
+      process.argv[2] ||
+      new Date().toISOString().slice(0, 10).replace(/-/g, "-");
     const todayData = JSON.parse(
       await readFile(
-        join(process.cwd(), "data", "history", "2026-05-07.json"),
+        join(
+          process.cwd(),
+          "data",
+          "history",
+          `${todayDate}.json`
+        ),
         "utf-8"
       )
     );
@@ -65,7 +88,7 @@ async function main() {
     }));
     missing = stocks.filter((s: { code: string; name: string }) => !existing[s.code]);
     console.log(
-      `今日涨停: ${stocks.length} 只, 待补充: ${missing.length} 只\n`
+      `${todayDate} 涨停: ${stocks.length} 只, 待补充: ${missing.length} 只\n`
     );
   } catch {
     console.log("未找到今日数据\n");
@@ -86,7 +109,10 @@ async function main() {
     const results = await Promise.allSettled(
       batch.map(async ({ code, name }) => {
         const ecode = emCode(code);
-        const industry = await fetchIndustry(ecode);
+        let industry = await fetchIndustry(ecode);
+        if (!industry) {
+          industry = await fetchIndustryFallback(code);
+        }
         if (industry) {
           existing[code] = industry;
           return { code, name, industry };
