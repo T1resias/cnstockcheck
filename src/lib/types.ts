@@ -5,9 +5,7 @@ export interface LimitUpStock {
   price: number;           // 最新价
   changePct: number;       // 涨跌幅%
   limitUpDays: number;     // 连板天数
-  firstLimitUpTime: string;// 首次封板时间 e.g. "09:30:12"
   turnoverRate: number;    // 换手率%
-  fundFlow: number;        // 封单资金(万元)
   sector: string;          // 所属题材/板块
   mkt: number;             // 市场: 0深交所 1上交所
 }

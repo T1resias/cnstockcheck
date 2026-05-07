@@ -104,9 +104,7 @@ export async function fetchLimitUpPool(_dateStr: string): Promise<LimitUpStock[]
       price: Number(s.trade) || 0,
       changePct: s.changepercent,
       limitUpDays: 1,
-      firstLimitUpTime: "",
       turnoverRate: s.turnoverratio || 0,
-      fundFlow: 0,
       sector: sectorMap.get(String(s.code)) || "",
       mkt: marketCode(String(s.code)),
     })

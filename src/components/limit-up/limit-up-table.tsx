@@ -16,9 +16,7 @@ export function LimitUpTable({ stocks }: Props) {
             <th className="px-3 py-2.5 font-medium w-20 text-right">最新价</th>
             <th className="px-3 py-2.5 font-medium w-20 text-right">涨幅</th>
             <th className="px-3 py-2.5 font-medium w-16 text-center">连板</th>
-            <th className="px-3 py-2.5 font-medium w-24 text-center">首次封板</th>
             <th className="px-3 py-2.5 font-medium w-20 text-right">换手率</th>
-            <th className="px-3 py-2.5 font-medium w-28 text-right">封单(万)</th>
             <th className="px-3 py-2.5 font-medium">题材</th>
           </tr>
         </thead>

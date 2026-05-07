@@ -28,14 +28,8 @@ export function LimitUpRow({ stock }: { stock: LimitUpStock }) {
           {stock.limitUpDays}板
         </span>
       </td>
-      <td className="px-3 py-2 text-center text-gray-500 tabular-nums">
-        {stock.firstLimitUpTime || "-"}
-      </td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-600">
         {stock.turnoverRate.toFixed(2)}%
-      </td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-700">
-        {stock.fundFlow > 0 ? (stock.fundFlow / 10000).toFixed(2) + "亿" : "-"}
       </td>
       <td className="px-3 py-2">
         <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
