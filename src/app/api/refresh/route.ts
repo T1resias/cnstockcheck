@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { refreshAll } from "@/lib/refresh";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export async function POST() {
 async function handleRefresh() {
   try {
     const result = await refreshAll();
+    revalidatePath("/");
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json(

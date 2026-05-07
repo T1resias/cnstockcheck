@@ -1,8 +1,8 @@
-import { loadLatestData, loadDailyData, getRecentDates } from "@/lib/data-store";
+import { loadDailyData, getRecentDates } from "@/lib/data-store";
 import { isTradingDay } from "@/lib/trading-calendar";
 import { MainContent } from "@/components/main-content";
 
-export const revalidate = 21600;
+export const revalidate = 60;
 
 function todayStr(): string {
   // 北京时间 UTC+8
@@ -24,9 +24,7 @@ export default async function HomePage({
   const selectedDate = params.date || today;
 
   const trading = await isTradingDay(selectedDate);
-  const data = params.date
-    ? await loadDailyData(selectedDate)
-    : await loadLatestData();
+  const data = await loadDailyData(selectedDate);
 
   const availableDates = await getRecentDates(60);
 

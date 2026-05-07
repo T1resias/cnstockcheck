@@ -24,11 +24,15 @@ let calendarCache: TradingCalendar | null = null;
 export async function loadCalendar(): Promise<TradingCalendar> {
   if (calendarCache) return calendarCache;
 
-  // Try to fetch from cn_stock_holidays GitHub repo
+  // Try to fetch from cn_stock_holidays GitHub repo (3s timeout for China)
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(
-      "https://raw.githubusercontent.com/rainx/cn_stock_holidays/main/holidays.json"
+      "https://raw.githubusercontent.com/rainx/cn_stock_holidays/main/holidays.json",
+      { signal: controller.signal }
     );
+    clearTimeout(timer);
     if (res.ok) {
       const data = await res.json();
       const holidays: string[] = [];

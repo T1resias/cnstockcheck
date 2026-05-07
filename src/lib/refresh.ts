@@ -16,12 +16,6 @@ function todayStr(): string {
   return `${y}-${m}-${day}`;
 }
 
-/** A股收盘时间: 北京时间 15:00 */
-function isAfterMarketClose(): boolean {
-  const h = beijingNow().getUTCHours();
-  return h >= 15;
-}
-
 export async function refreshAll(): Promise<{
   date: string;
   isTradingDay: boolean;
@@ -32,17 +26,10 @@ export async function refreshAll(): Promise<{
   const today = todayStr();
   const todayIsTrading = await isTradingDay(today);
 
-  // 选数据日期: 收盘后用今天，否则用最近交易日
-  let dataDate: string;
-  if (todayIsTrading && isAfterMarketClose()) {
-    dataDate = today;
-  } else {
-    dataDate = await getLatestTradingDay(today).catch(() => today);
-  }
-
-  if (!todayIsTrading && !isAfterMarketClose()) {
-    return { date: today, isTradingDay: false, stockCount: 0, sectorCount: 0, newsCount: 0 };
-  }
+  // 交易日拉取当天数据（盘前也拉，API 会返回实时数据），非交易日取最近交易日
+  const dataDate = todayIsTrading
+    ? today
+    : await getLatestTradingDay(today).catch(() => today);
 
   // 拉取数据: 股票(含行业) + 板块 + 资讯
   const [stocks, rawSectors, news] = await Promise.all([
