@@ -63,7 +63,7 @@ async function main() {
       code: String(s.code),
       name: s.name,
     }));
-    missing = stocks.filter((s) => !existing[s.code]);
+    missing = stocks.filter((s: { code: string; name: string }) => !existing[s.code]);
     console.log(
       `今日涨停: ${stocks.length} 只, 待补充: ${missing.length} 只\n`
     );
