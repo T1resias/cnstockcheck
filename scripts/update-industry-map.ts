@@ -1,5 +1,6 @@
 /**
- * 批量拉取全部A股行业 → 更新 data/industry-map.json
+ * 从东方财富 F10 API 批量拉取股票行业 → 更新 data/industry-map.json
+ * 数据源: emweb.securities.eastmoney.com/PC_HSF10/CompanySurvey/CompanySurveyAjax
  * 用法: npx tsx scripts/update-industry-map.ts
  */
 import { writeFile, readFile } from "fs/promises";
@@ -8,49 +9,28 @@ import { join } from "path";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-const MARKETS = [
-  { fs: "m:0+t:6", label: "深市主板" },
-  { fs: "m:0+t:80", label: "创业板" },
-  { fs: "m:0+t:81", label: "北交所" },
-  { fs: "m:1+t:2", label: "沪市主板" },
-  { fs: "m:1+t:23", label: "科创板" },
-];
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
-async function fetchMarket(market: string): Promise<[string, string][]> {
-  const params = new URLSearchParams({
-    fid: "f3",
-    po: "1",
-    pz: "6000",
-    pn: "1",
-    np: "1",
-    fltt: "2",
-    invt: "2",
-    ut: "b2884a393a59ad64002292a3e90d46a5",
-    fs: market,
-    fields: "f12,f14,f127",
-  });
+/** 股票代码 → 东方财富 market prefix (SH/SZ/BJ) */
+function emCode(code: string): string {
+  // 北交所: 8xxxxx, 92xxxx
+  if (code.startsWith("8") || code.startsWith("92")) return `BJ${code}`;
+  // 沪市: 6xxxxx, 5xxxxx
+  if (code.startsWith("6") || code.startsWith("5")) return `SH${code}`;
+  // 深市: 0xxxxx, 3xxxxx
+  return `SZ${code}`;
+}
 
-  const url = `https://push2.eastmoney.com/api/qt/clist/get?${params}`;
+async function fetchIndustry(emCode: string): Promise<string | null> {
+  const url = `https://emweb.securities.eastmoney.com/PC_HSF10/CompanySurvey/CompanySurveyAjax?code=${emCode}`;
   const res = await fetch(url, {
-    headers: {
-      "User-Agent": UA,
-      Referer: "https://data.eastmoney.com/",
-    },
+    headers: { "User-Agent": UA, Referer: "https://emweb.securities.eastmoney.com/" },
   });
-
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-
+  if (!res.ok) return null;
   const json: any = await res.json();
-  const diff = json?.data?.diff;
-  if (!Array.isArray(diff)) {
-    throw new Error("unexpected response format");
-  }
-
-  return diff
-    .filter((r: any) => r.f12 && r.f127)
-    .map((r: any) => [String(r.f12), String(r.f127)] as [string, string]);
+  return json?.jbzl?.sshy || null;
 }
 
 async function main() {
@@ -67,30 +47,65 @@ async function main() {
         existing[k] = v;
       }
     }
-    console.log(`已有缓存: ${Object.keys(existing).length} 只股票`);
+    console.log(`已有缓存: ${Object.keys(existing).length} 只`);
+  } catch {}
+
+  // 加载今日涨停数据，找出缺失的股票
+  let missing: { code: string; name: string }[] = [];
+  try {
+    const todayData = JSON.parse(
+      await readFile(
+        join(process.cwd(), "data", "history", "2026-05-07.json"),
+        "utf-8"
+      )
+    );
+    const stocks = todayData.limitUpStocks.map((s: any) => ({
+      code: String(s.code),
+      name: s.name,
+    }));
+    missing = stocks.filter((s) => !existing[s.code]);
+    console.log(
+      `今日涨停: ${stocks.length} 只, 待补充: ${missing.length} 只\n`
+    );
   } catch {
-    console.log("无现有缓存，将全量拉取");
+    console.log("未找到今日数据\n");
   }
 
-  // 逐市场拉取
-  let totalNew = 0;
-  let totalSkipped = 0;
-  for (const { fs, label } of MARKETS) {
-    try {
-      const stocks = await fetchMarket(fs);
-      let added = 0;
-      for (const [code, industry] of stocks) {
-        if (!existing[code]) {
+  if (missing.length === 0) {
+    console.log("所有股票已在缓存中");
+    return;
+  }
+
+  // 并发拉取（5个一组）
+  let added = 0;
+  let failed = 0;
+  const batchSize = 5;
+
+  for (let i = 0; i < missing.length; i += batchSize) {
+    const batch = missing.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(async ({ code, name }) => {
+        const ecode = emCode(code);
+        const industry = await fetchIndustry(ecode);
+        if (industry) {
           existing[code] = industry;
-          added++;
+          return { code, name, industry };
         }
+        return null;
+      })
+    );
+
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) {
+        const { code, name, industry } = r.value;
+        added++;
+        console.log(`[${i + 1}-${Math.min(i + batchSize, missing.length)}/${missing.length}] ${code} ${name} → ${industry}`);
+      } else {
+        failed++;
       }
-      totalNew += added;
-      totalSkipped += stocks.length - added;
-      console.log(`${label}: ${stocks.length} 只 (新增 ${added})`);
-    } catch (e: any) {
-      console.error(`${label}: 失败 - ${e.message}`);
     }
+
+    if (i + batchSize < missing.length) await sleep(100);
   }
 
   // 保存
@@ -99,19 +114,17 @@ async function main() {
     lastFullRefresh: new Date().toISOString().slice(0, 10),
     totalEntries: Object.keys(existing).length,
   };
-
   await writeFile(
     join(process.cwd(), "data", "industry-map.json"),
     JSON.stringify(toSave, null, 2),
     "utf-8"
   );
-
   console.log(
-    `\n完成: 总计 ${Object.keys(existing).length} 只, 新增 ${totalNew} 只`
+    `\n✅ 总计 ${Object.keys(existing).length} 只 (新增 ${added})${failed > 0 ? `, 失败 ${failed}` : ""}`
   );
 }
 
 main().catch((e) => {
-  console.error("更新失败:", e);
+  console.error("失败:", e);
   process.exit(1);
 });
