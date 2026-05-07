@@ -81,76 +81,21 @@ export async function fetchLimitUpPool(_dateStr: string): Promise<LimitUpStock[]
     return s.changepercent >= limitThreshold(code);
   });
 
-  // 加载本地行业缓存
-  let meta: { lastFullRefresh?: string } = {};
+  // 加载本地行业缓存 (通过 scripts/update-industry-map.ts 增量更新)
   let localIndustryMap: Record<string, string> = {};
-  let stale = false;
   try {
     const { readFile } = await import("fs/promises");
     const { join } = await import("path");
     const raw = await readFile(join(process.cwd(), "data", "industry-map.json"), "utf-8");
     const full = JSON.parse(raw);
-    meta = full._meta || {};
     for (const [k, v] of Object.entries(full)) {
       if (k !== "_meta" && typeof v === "string") localIndustryMap[k] = v;
-    }
-    // 30天无全量刷新则标记过期
-    if (meta.lastFullRefresh) {
-      const age = Date.now() - new Date(meta.lastFullRefresh).getTime();
-      if (age > 30 * 24 * 3600 * 1000) stale = true;
     }
   } catch {
     /* no cache yet */
   }
-  const cachedCount = Object.keys(localIndustryMap).length;
 
-  // 过期缓存清除，强制重查
-  if (stale) {
-    localIndustryMap = {};
-    meta.lastFullRefresh = undefined;
-  }
-
-  // 批量获取行业信息 (优先用缓存，缓存未命中则调API)
-  // Vercel环境下跳过个股API调用（10s超时限制），仅用本地缓存
   const sectorMap = new Map<string, string>(Object.entries(localIndustryMap));
-  const isVercel = process.env.VERCEL === "1";
-
-  for (const s of candidates) {
-    const code = String(s.code);
-    if (sectorMap.has(code) || isVercel) continue;
-
-    try {
-      const mkt = marketCode(code) === 1 ? "1" : "0";
-      const emUrl = `https://push2.eastmoney.com/api/qt/stock/get?secid=${mkt}.${code}&fields=f57,f127&ut=b2884a393a59ad64002292a3e90d46a5`;
-      const emRes = await fetch(emUrl, {
-        headers: EM_HEADERS,
-      });
-      if (emRes.ok) {
-        const emJson = await emRes.json();
-        const industry = String(emJson?.data?.f127 || "");
-        if (industry) {
-          sectorMap.set(code, industry);
-          localIndustryMap[code] = industry;
-        }
-      }
-    } catch {
-      // 获取失败，跳过
-    }
-
-    // 延迟 300ms 避免限流
-    await new Promise((r) => setTimeout(r, 300));
-  }
-
-  // 有变更则保存缓存
-  const newCount = Object.keys(localIndustryMap).length;
-  if (newCount !== cachedCount || stale) {
-    const { writeFile } = await import("fs/promises");
-    const { join } = await import("path");
-    const toSave: Record<string, unknown> = { ...localIndustryMap };
-    toSave._meta = { lastFullRefresh: new Date().toISOString().slice(0, 10), totalEntries: newCount };
-    const cachePath = join(process.cwd(), "data", "industry-map.json");
-    writeFile(cachePath, JSON.stringify(toSave, null, 2), "utf-8").catch(() => {});
-  }
 
   return candidates.map(
     (s): LimitUpStock => ({
