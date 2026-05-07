@@ -26,6 +26,7 @@ export async function saveDailyData(data: DailyMarketData): Promise<void> {
       await put(`history/${data.date}.json`, content, {
         access: "public",
         addRandomSuffix: false,
+        allowOverwrite: true,
       });
       return;
     } catch {
@@ -197,6 +198,7 @@ export async function saveConsecutiveDays(store: ConsecutiveDaysStore): Promise<
     await put("consecutive-days.json", content, {
       access: "public",
       addRandomSuffix: false,
+      allowOverwrite: true,
     });
     return;
   }
